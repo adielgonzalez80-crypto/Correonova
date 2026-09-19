@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CorreoNova — demo local</title>
+<style>
+:root{--bg:#050817;--bg2:#07101f;--panel:#0a1428;--line:#1d3d67;--text:#eef4ff;--muted:#8f9bb3;--accent:#1887ff;--unread:#54d6ff;--hover:#12243f;--danger:#ff5d7a;--ok:#3ee0b0}
+*{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif}
+button,input,textarea{font:inherit;color:inherit}button{cursor:pointer}
+.app{display:grid;grid-template-rows:64px 1fr;height:100%}
+.top{display:flex;align-items:center;gap:16px;padding:0 18px;border-bottom:1px solid var(--line)}
+.brand{font-size:22px;font-weight:800}.brand b{color:#54d6ff}
+.search{flex:1}.search input,.field,.btn{border:1px solid var(--line);background:#10192f;border-radius:12px;padding:10px 12px}
+.search input{width:min(560px,100%);margin:0 auto;display:block;border-radius:999px}
+.btn.primary,.compose{background:linear-gradient(100deg,#147fff,#5a3ff2);border:0;color:#fff;font-weight:800}
+.shell{display:grid;grid-template-columns:240px minmax(280px,400px) 1fr;min-height:0}
+.side,.list,.read{overflow:auto;min-height:0}
+.side{border-right:1px solid var(--line);padding:16px 12px;background:var(--bg2)}
+.compose{width:100%;border-radius:14px;padding:12px;margin-bottom:14px}
+.nav button{width:100%;text-align:left;border:0;background:transparent;border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between}
+.nav button.active,.nav button:hover,.msg:hover,.msg.active{background:var(--hover)}
+.list{border-right:1px solid var(--line)}
+.list-head{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.msg{width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:transparent;padding:12px 14px}
+.msg.unread strong{color:var(--unread)}
+.msg .meta,.who,small{color:var(--muted);font-size:12px}
+.msg p{margin:6px 0 0;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.read{padding:24px}
+.read h2{margin:6px 0 8px}
+.body{white-space:pre-wrap;line-height:1.55;border-top:1px solid var(--line);padding-top:16px}
+.actions,.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.account{margin-top:16px;padding:12px;border:1px solid var(--line);border-radius:16px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.62);display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.card{width:min(680px,100%);background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:20px}
+label{display:block;margin:12px 0 6px;color:var(--muted)}
+textarea.field{min-height:160px;width:100%}
+.field{width:100%}
+.status{color:var(--ok);min-height:18px;margin-top:8px}
+.empty{padding:36px;text-align:center;color:var(--muted)}
+.note{font-size:12px;color:var(--muted);padding:10px 18px;border-bottom:1px solid var(--line)}
+@media(max-width:900px){.shell{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">Correo<b>Nova</b></div>
+    <div class="search"><input id="q" placeholder="Buscar"></div>
+    <button class="btn" id="accountBtn">Cuenta</button>
+  </header>
+  <div class="note">Demo local: el correo se guarda en este navegador. Crea dos cuentas y envíate mensajes entre ellas. Para Internet usa el Worker de Cloudflare de esta misma carpeta.</div>
+  <div class="shell">
+    <aside class="side">
+      <button class="compose" id="newBtn">＋ Redactar</button>
+      <nav class="nav" id="nav"></nav>
+      <div class="account"><strong id="whoName">Invitado</strong><br><small id="whoMail">Sin sesión</small></div>
+    </aside>
+    <section class="list">
+      <div class="list-head"><strong id="folderTitle">Entrada</strong><button class="btn" id="refreshBtn">Actualizar</button></div>
+      <div id="list"></div>
+    </section>
+    <section class="read" id="read"><div class="empty">Selecciona o redacta un mensaje.</div></section>
+  </div>
+</div>
+<div class="modal" id="authModal"><div class="card">
+  <h2>Cuenta</h2>
+  <label>Nombre</label><input class="field" id="displayName">
+  <label>Correo</label><input class="field" id="email" type="email" placeholder="ana@correonova.local">
+  <label>Contraseña</label><input class="field" id="password" type="password">
+  <div class="row"><button class="btn" onclick="closeM('authModal')">Cerrar</button><button class="btn" id="registerBtn">Crear</button><button class="btn primary" id="loginBtn">Entrar</button><button class="btn" id="logoutBtn">Salir</button></div>
+  <div class="status" id="authStatus"></div>
+</div></div>
+<div class="modal" id="composeModal"><div class="card">
+  <h2>Nuevo mensaje</h2>
+  <label>Para</label><input class="field" id="to" placeholder="luis@correonova.local">
+  <label>Asunto</label><input class="field" id="subject">
+  <label>Mensaje</label><textarea class="field" id="body"></textarea>
+  <div class="row"><button class="btn" id="draftBtn">Borrador</button><button class="btn" onclick="closeM('composeModal')">Cancelar</button><button class="btn primary" id="sendBtn">Enviar</button></div>
+  <div class="status" id="sendStatus"></div>
+</div></div>
+<script>
+const F=[["inbox","📥 Entrada"],["starred","⭐ Importantes"],["sent","📤 Enviados"],["drafts","📝 Borradores"],["archive","📦 Archivo"],["trash","🗑️ Papelera"]];
+const db=()=>JSON.parse(localStorage.getItem("cn12")||'{"users":[],"messages":[],"session":null}');
+const save=d=>localStorage.setItem("cn12",JSON.stringify(d));
+const uid=()=>crypto.randomUUID();
+const now=()=>new Date().toISOString();
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+let folder="inbox", selected=null, reply=null;
+function openM(id){$(id).classList.add("open")}
+function closeM(id){$(id).classList.remove("open")}
+function sessionUser(){
+  const d=db(); if(!d.session) return null;
+  return d.users.find(u=>u.id===d.session)||null;
+}
+function counts(uid){
+  const m=db().messages.filter(x=>x.owner===uid);
+  return {
+    inbox:m.filter(x=>x.folder==="inbox"&&!x.deleted).length,
+    starred:m.filter(x=>x.starred&&!x.deleted).length,
+    sent:m.filter(x=>x.folder==="sent"&&!x.deleted).length,
+    drafts:m.filter(x=>x.folder==="drafts"&&!x.deleted).length,
+    archive:m.filter(x=>x.folder==="archive"&&!x.deleted).length,
+    trash:m.filter(x=>x.deleted).length
+  };
+}
+function render(){
+  const u=sessionUser();
+  $("whoName").textContent=u?u.name:"Invitado";
+  $("whoMail").textContent=u?u.email:"Crea dos cuentas y envíate correo";
+  const c=u?counts(u.id):{};
+  $("nav").innerHTML=F.map(([id,l])=>`<button data-f="${id}" class="${folder===id?"active":""}">${l}<span>${c[id]||""}</span></button>`).join("");
+  $("nav").onclick=e=>{const b=e.target.closest("button"); if(!b)return; folder=b.dataset.f; selected=null; render()};
+  $("folderTitle").textContent=F.find(x=>x[0]===folder)[1];
+  if(!u){$("list").innerHTML="<div class='empty'>Inicia sesión.</div>";return}
+  const q=$("q").value.trim().toLowerCase();
+  let items=db().messages.filter(m=>m.owner===u.id);
+  items=folder==="trash"?items.filter(m=>m.deleted)
+    :folder==="starred"?items.filter(m=>m.starred&&!m.deleted)
+    :items.filter(m=>!m.deleted&&m.folder===folder);
+  if(q) items=items.filter(m=>(m.subject+m.body+m.from+m.to).toLowerCase().includes(q));
+  items.sort((a,b)=>b.at.localeCompare(a.at));
+  $("list").innerHTML=items.length?items.map(m=>`<button class="msg ${m.read?"":"unread"} ${selected===m.id?"active":""}" data-id="${m.id}">
+    <div class="meta"><span>${esc(m.from)}</span><span>${esc(m.at.slice(0,16).replace("T"," "))}</span></div>
+    <strong>${m.starred?"★ ":""}${esc(m.subject||"(sin asunto)")}</strong><p>${esc(m.body)}</p></button>`).join(""):"<div class='empty'>No hay mensajes.</div>";
+  $("list").onclick=e=>{const b=e.target.closest(".msg"); if(!b)return; selected=b.dataset.id; const m=db().messages.find(x=>x.id===selected); if(m){m.read=true; save(db())} render()};
+  const m=items.find(x=>x.id===selected);
+  if(!m){$("read").innerHTML="<div class='empty'>Selecciona un mensaje.</div>";return}
+  $("read").innerHTML=`<small>${esc(m.at)}</small><h2>${esc(m.subject||"(sin asunto)")}</h2>
+    <div class="who">De: ${esc(m.from)}<br>Para: ${esc(m.to)}</div>
+    <div class="actions">
+      <button class="btn" id="rpl">Responder</button>
+      <button class="btn" id="fwd">Reenviar</button>
+      <button class="btn" id="star">${m.starred?"Quitar estrella":"Destacar"}</button>
+      <button class="btn" id="arch">Archivar</button>
+      <button class="btn" id="del">${folder==="trash"?"Eliminar":"Papelera"}</button>
+    </div>
+    <div class="body">${esc(m.body)}</div>`;
+  $("rpl").onclick=()=>{reply={to:m.from,subject:(m.subject||"").startsWith("Re:")?m.subject:"Re: "+m.subject,body:"\n\n---\n"+m.body}; openCompose()};
+  $("fwd").onclick=()=>{reply={to:"",subject:"Rv: "+m.subject,body:"\n\n--- Reenviado ---\n"+m.body}; openCompose()};
+  $("star").onclick=()=>{m.starred=!m.starred; save(db()); render()};
+  $("arch").onclick=()=>{m.folder="archive"; save(db()); selected=null; render()};
+  $("del").onclick=()=>{
+    const d=db(); const x=d.messages.find(i=>i.id===m.id);
+    if(folder==="trash") d.messages=d.messages.filter(i=>i.id!==m.id); else x.deleted=true;
+    save(d); selected=null; render();
+  };
+}
+function openCompose(){
+  if(!sessionUser()){openM("authModal"); $("authStatus").textContent="Primero crea una cuenta."; return}
+  $("to").value=reply?.to||""; $("subject").value=reply?.subject||""; $("body").value=reply?.body||"";
+  $("sendStatus").textContent=""; openM("composeModal");
+}
+$("newBtn").onclick=()=>{reply=null; openCompose()};
+$("accountBtn").onclick=()=>openM("authModal");
+$("q").oninput=render; $("refreshBtn").onclick=render;
+$("registerBtn").onclick=()=>{
+  const d=db(); const email=$("email").value.trim().toLowerCase(); const pass=$("password").value;
+  if(!email.includes("@")||pass.length<4){$("authStatus").textContent="Correo y clave válidos.";return}
+  if(d.users.some(u=>u.email===email)){$("authStatus").textContent="Ese correo ya existe.";return}
+  const u={id:uid(),email,pass,name:$("displayName").value||email.split("@")[0]};
+  d.users.push(u); d.session=u.id; save(d); closeM("authModal"); render();
+};
+$("loginBtn").onclick=()=>{
+  const d=db(); const u=d.users.find(x=>x.email===$("email").value.trim().toLowerCase()&&x.pass===$("password").value);
+  if(!u){$("authStatus").textContent="Datos incorrectos.";return}
+  d.session=u.id; save(d); closeM("authModal"); render();
+};
+$("logoutBtn").onclick=()=>{const d=db(); d.session=null; save(d); closeM("authModal"); render()};
+function putMsg(owner,folder,from,to,subject,body){
+  const d=db(); d.messages.push({id:uid(),owner,folder,from,to,subject,body,read:folder==="sent"||folder==="drafts",starred:false,deleted:false,at:now()}); save(d);
+}
+$("sendBtn").onclick=()=>{
+  const u=sessionUser(); const to=$("to").value.trim().toLowerCase();
+  if(!to.includes("@")){$("sendStatus").textContent="Destinatario inválido.";return}
+  putMsg(u.id,"sent",u.email,to,$("subject").value,$("body").value);
+  const dest=db().users.find(x=>x.email===to);
+  if(dest) putMsg(dest.id,"inbox",u.email,to,$("subject").value,$("body").value);
+  $("sendStatus").textContent=dest?"Entregado en la bandeja del destinatario.":"Guardado en Enviados. El destinatario no tiene cuenta local.";
+  setTimeout(()=>closeM("composeModal"),700); render();
+};
+$("draftBtn").onclick=()=>{const u=sessionUser(); putMsg(u.id,"drafts",u.email,$("to").value,$("subject").value,$("body").value); closeM("composeModal"); render()};
+render();
+</script>
+</body>
+</html>

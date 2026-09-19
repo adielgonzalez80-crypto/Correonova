@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "correonova",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-17",
+  "workers_dev": true,
+  "vars": {
+    "APP_NAME": "CorreoNova",
+    "APP_VERSION": "V12"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "correonova-db",
+      "database_id": "REEMPLAZAR_CON_EL_ID_DE_D1"
+    }
+  ]
+}
