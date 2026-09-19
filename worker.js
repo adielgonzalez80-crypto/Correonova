@@ -43,7 +43,7 @@ async function verifyPassword(password, stored) {
   const data = new TextEncoder().encode(password);
   const key = await crypto.subtle.importKey("raw", data, "PBKDF2", false, ["deriveBits"]);
   const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt: unb64(salt64), iterations: Number(iter) || 120000, hash: "SHA-256" },
+    { name: "PBKDF2", salt: unb64(salt64), iterations: Number(iter) || 100000, hash: "SHA-256" },
     key,
     256
   );
